@@ -34,6 +34,9 @@ export default function Navbar() {
     ? [
         { to: '/ai', label: 'מתכון עם AI' },
         { to: '/my-recipes', label: 'המתכונים שלי' },
+        // הקישור מוצג רק לאדמינים. זו הסתרה ויזואלית בלבד - ההגנה האמיתית
+        // היא AdminRoute בלקוח וה-middleware `admin` בשרת.
+        ...(user.role === 'admin' ? [{ to: '/admin/users', label: 'ניהול משתמשים' }] : []),
       ]
     : [{ to: '/ai', label: 'מתכון עם AI' }];
 

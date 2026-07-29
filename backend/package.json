@@ -9,6 +9,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "seed": "node scripts/seedRecipes.js",
+    "make-admin": "node scripts/makeAdmin.js",
     "cleanup:uploads": "node scripts/cleanupUploads.js"
   },
   "keywords": [],

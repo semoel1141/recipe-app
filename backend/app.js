@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const recipeRoutes = require('./routes/recipeRoutes');
 const authRoutes = require('./routes/authRoutes');
 const aiRecipeRoutes = require('./routes/aiRecipes');
+const userRoutes = require('./routes/userRoutes');
 
 /**
  * בונה את אפליקציית ה-Express בלי להאזין לפורט ובלי להתחבר למסד.
@@ -57,6 +58,8 @@ function createApp() {
   app.use('/api/recipes', aiRecipeRoutes);
   app.use('/api/recipes', recipeRoutes);
   app.use('/api/auth', authRoutes);
+  // ניהול משתמשים - כל הנתיבים בפנים מוגנים ב-protect + admin
+  app.use('/api/users', userRoutes);
 
   // 404 בפורמט JSON - בלי זה Express מחזיר דף HTML שהלקוח לא יודע לפרסר
   app.use((req, res) => {

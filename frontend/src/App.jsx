@@ -1,6 +1,7 @@
 import { Routes, Route } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import PrivateRoute from './components/PrivateRoute'
+import AdminRoute from './components/AdminRoute'
 import RecipeList from './pages/RecipeList'
 import MyRecipes from './pages/MyRecipes'
 import RecipeDetail from './pages/RecipeDetail'
@@ -8,6 +9,7 @@ import RecipeForm from './pages/RecipeForm'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import NotFound from './pages/NotFound'
+import AdminUsers from './pages/AdminUsers'
 import AiRecipeManager from './components/AiRecipeManager'
 
 function App() {
@@ -28,6 +30,14 @@ function App() {
               <PrivateRoute>
                 <Page><MyRecipes /></Page>
               </PrivateRoute>
+            }
+          />
+          <Route
+            path="/admin/users"
+            element={
+              <AdminRoute>
+                <Page><AdminUsers /></Page>
+              </AdminRoute>
             }
           />
           {/* עמוד המתכון מנהל את הרוחב בעצמו - ה-hero חורג במכוון */}
