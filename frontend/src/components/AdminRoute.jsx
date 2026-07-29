@@ -13,8 +13,20 @@ import { useAuth } from '../hooks/useAuth';
  * שמחזיר 403 לכל בקשה שאינה של אדמין - גם אם מישהו ינווט לכאן ידנית.
  */
 export default function AdminRoute({ children }) {
-  const { user } = useAuth();
+  const { user, syncing } = useAuth();
   const location = useLocation();
+
+  // ממתינים לסנכרון ההרשאה מהשרת לפני שמחליטים. בלי זה, כניסה ישירה
+  // לכתובת הזו נחסמת לפי ה-role הישן שב-localStorage - למשל מיד אחרי
+  // שאדמין קידם את המשתמש, אבל הוא עוד לא התחבר מחדש.
+  if (syncing) {
+    return (
+      <div className="animate-pulse space-y-3" aria-hidden="true">
+        <div className="h-8 w-1/3 rounded bg-stone-200" />
+        <div className="h-16 rounded bg-stone-100" />
+      </div>
+    );
+  }
 
   if (!user) {
     return <Navigate to="/login" replace state={{ from: location }} />;

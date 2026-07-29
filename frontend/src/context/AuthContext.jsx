@@ -33,6 +33,14 @@ function readStoredUser() {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(readStoredUser);
 
+  // האם הסנכרון הראשוני מול השרת עדיין רץ.
+  //
+  // נחוץ כדי למנוע מרוץ: שומרי הנתיבים (AdminRoute/PrivateRoute) מחליטים
+  // באופן סינכרוני ברינדור הראשון. בלי הדגל הזה, כניסה ישירה ל-/admin/users
+  // הייתה נחסמת לפי ה-role הישן שב-localStorage ומפנה לדף הבית **לפני**
+  // שתשובת /auth/me עם ההרשאה המעודכנת בכלל הספיקה לחזור.
+  const [syncing, setSyncing] = useState(() => Boolean(localStorage.getItem('token')));
+
   // מסנכרן את פרטי המשתמש מהשרת בטעינת האפליקציה.
   //
   // הסיבה: ב-localStorage נשמר צילום מצב מרגע ההתחברות. אם ההרשאה השתנתה
@@ -59,6 +67,9 @@ export function AuthProvider({ children }) {
       .catch(() => {
         // 401 כבר מטופל ב-interceptor שב-api/axios.js (ניקוי והפניה ל-login).
         // כל שאר התקלות (רשת, שרת ישן) - ממשיכים עם הערך השמור.
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setSyncing(false);
       });
 
     return () => controller.abort();
@@ -81,7 +92,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout }}>
+    <AuthContext.Provider value={{ user, syncing, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );
