@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import api from '../api/axios';
 import { AuthContext } from './authContextValue';
 
@@ -32,6 +32,37 @@ function readStoredUser() {
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(readStoredUser);
+
+  // מסנכרן את פרטי המשתמש מהשרת בטעינת האפליקציה.
+  //
+  // הסיבה: ב-localStorage נשמר צילום מצב מרגע ההתחברות. אם ההרשאה השתנתה
+  // מאז (למשל אדמין קידם את המשתמש, או הוריד לו הרשאה), הלקוח היה ממשיך
+  // להאמין לערך הישן עד התחברות מחדש - ומציג או מסתיר את אזור הניהול לא נכון.
+  //
+  // אין כאן סיכון אבטחה בשני הכיוונים: השרת בודק את ההרשאה מחדש בכל בקשה,
+  // אז ערך מנופח בלקוח לא נותן גישה אמיתית. זה תיקון של עקביות התצוגה.
+  useEffect(() => {
+    if (!localStorage.getItem('token')) return;
+
+    const controller = new AbortController();
+
+    api
+      .get('/auth/me', { signal: controller.signal })
+      .then(({ data }) => {
+        setUser((current) => {
+          // אם המשתמש התנתק בינתיים, לא מחזירים אותו למצב מחובר
+          if (!current) return current;
+          localStorage.setItem('user', JSON.stringify(data));
+          return data;
+        });
+      })
+      .catch(() => {
+        // 401 כבר מטופל ב-interceptor שב-api/axios.js (ניקוי והפניה ל-login).
+        // כל שאר התקלות (רשת, שרת ישן) - ממשיכים עם הערך השמור.
+      });
+
+    return () => controller.abort();
+  }, []);
 
   const login = async (email, password) => {
     const { data } = await api.post('/auth/login', { email, password });
