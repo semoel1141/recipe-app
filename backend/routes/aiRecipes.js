@@ -15,6 +15,24 @@ const { getCuratedImage, deriveSearchTerms } = require('../config/recipeImages')
 
 const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
 
+/**
+ * האם לייצר תמונות ב-AI ולשמור אותן לדיסק.
+ *
+ * כבוי כברירת מחדל, ובכוונה. יצירת תמונה ב-Gemini כותבת קובץ ל-uploads/,
+ * אבל מערכת הקבצים ב-Render (וברוב פלטפורמות ה-PaaS בתוכנית החינמית)
+ * היא **ephemeral** - היא נמחקת בכל פריסה מחדש והפעלה מחדש. התוצאה:
+ * מתכון שנשמר עם תמונה כזו מציג תמונה שבורה כעבור כמה שעות.
+ *
+ * כשהמתג כבוי, /generate-image הולך ישירות למסלול התמונות היציב
+ * (מפה קבועה -> חיפוש לפי מילות מפתח ב-TheMealDB), שמחזיר כתובות חיצוניות
+ * שלא תלויות בדיסק שלנו. יצירת המתכון עצמו (/generate, /modify) ממשיכה
+ * לעבוד רגיל - היא לא נוגעת בדיסק.
+ *
+ * להפעלה: AI_IMAGE_GENERATION=true, אבל רק אם יש אחסון קבוע
+ * (דיסק בתשלום ב-Render, או שירות חיצוני כמו Cloudinary).
+ */
+const AI_IMAGE_GENERATION = process.env.AI_IMAGE_GENERATION === 'true';
+
 // עוטף handler אסינכרוני ומעביר שגיאות ל-handler המרכזי בתחתית הקובץ,
 // כדי לא לחזור על אותו try/catch בכל route
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -163,21 +181,24 @@ router.post(
       return res.status(400).json({ message: 'חסר שם מתכון ליצירת התמונה' });
     }
 
-    // מסלול ראשי: יצירת תמונה ב-AI
-    try {
-      const { buffer, mimeType } = await generateRecipeImage(title, description);
+    // מסלול ראשי: יצירת תמונה ב-AI. מדולג כשהאחסון זמני (ראו AI_IMAGE_GENERATION),
+    // כי תמונה שנשמרת לדיסק של Render נעלמת בפריסה הבאה.
+    if (AI_IMAGE_GENERATION) {
+      try {
+        const { buffer, mimeType } = await generateRecipeImage(title, description);
 
-      await fs.mkdir(UPLOADS_DIR, { recursive: true });
-      const ext = mimeType.includes('jpeg') ? 'jpg' : 'png';
-      const fileName = `${crypto.randomUUID()}.${ext}`;
-      await fs.writeFile(path.join(UPLOADS_DIR, fileName), buffer);
+        await fs.mkdir(UPLOADS_DIR, { recursive: true });
+        const ext = mimeType.includes('jpeg') ? 'jpg' : 'png';
+        const fileName = `${crypto.randomUUID()}.${ext}`;
+        await fs.writeFile(path.join(UPLOADS_DIR, fileName), buffer);
 
-      // מחזירים נתיב **יחסי** ולא כתובת מלאה (C4): כתובת מלאה עם localhost
-      // נשמרת במסד ונשברת ברגע שהשרת עובר לדומיין אמיתי. הלקוח מרכיב את
-      // הכתובת המלאה מול ה-API שהוא מדבר איתו בפועל.
-      return res.json({ imageUrl: `/uploads/${fileName}`, source: 'ai' });
-    } catch (aiError) {
-      console.warn('[generate-image] יצירת תמונה ב-AI נכשלה, עובר לגיבוי:', aiError.message.slice(0, 120));
+        // מחזירים נתיב **יחסי** ולא כתובת מלאה (C4): כתובת מלאה עם localhost
+        // נשמרת במסד ונשברת ברגע שהשרת עובר לדומיין אמיתי. הלקוח מרכיב את
+        // הכתובת המלאה מול ה-API שהוא מדבר איתו בפועל.
+        return res.json({ imageUrl: `/uploads/${fileName}`, source: 'ai' });
+      } catch (aiError) {
+        console.warn('[generate-image] יצירת תמונה ב-AI נכשלה, עובר לגיבוי:', aiError.message.slice(0, 120));
+      }
     }
 
     // מסלול גיבוי: תצלום אמיתי שמתאים לשם המנה (ראו findMatchingPhoto)
