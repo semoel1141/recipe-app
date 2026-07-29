@@ -1,0 +1,207 @@
+const express = require('express');
+const fs = require('fs/promises');
+const path = require('path');
+const crypto = require('crypto');
+const router = express.Router();
+const Recipe = require('../models/Recipe');
+const { protect } = require('../middleware/auth');
+const { aiTextLimiter, aiImageLimiter } = require('../middleware/rateLimit');
+const {
+  generateRecipeJson,
+  generateRecipeImage,
+  suggestImageSearchTerm,
+} = require('../config/gemini');
+
+const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
+
+// עוטף handler אסינכרוני ומעביר שגיאות ל-handler המרכזי בתחתית הקובץ,
+// כדי לא לחזור על אותו try/catch בכל route
+const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+// ולידציה בסיסית של אובייקט מתכון שהגיע מהלקוח (ב-/modify וב-/save),
+// כי אסור לסמוך על כך שהלקוח שולח בדיוק את מה שה-AI החזיר
+function validateRecipeShape(recipe) {
+  if (!recipe || typeof recipe !== 'object') return 'חסר אובייקט מתכון';
+  if (!recipe.title?.trim()) return 'למתכון חסר שם';
+  if (!Array.isArray(recipe.ingredients) || recipe.ingredients.length === 0) return 'למתכון חסרים מרכיבים';
+  const hasInstructions = Array.isArray(recipe.instructions)
+    ? recipe.instructions.length > 0
+    : Boolean(recipe.instructions?.trim());
+  if (!hasInstructions) return 'למתכון חסרות הוראות הכנה';
+  return null;
+}
+
+// POST /api/recipes/generate - יוצר מתכון חדש מאפס לפי בקשה חופשית של המשתמש
+router.post(
+  '/generate',
+  aiTextLimiter,
+  asyncHandler(async (req, res) => {
+    const { prompt } = req.body;
+
+    if (typeof prompt !== 'string' || !prompt.trim()) {
+      return res.status(400).json({ message: 'יש לכתוב מה להכין' });
+    }
+    if (prompt.length > 500) {
+      return res.status(400).json({ message: 'הבקשה ארוכה מדי (עד 500 תווים)' });
+    }
+
+    const recipe = await generateRecipeJson(
+      `צור מתכון מלא לפי הבקשה הבאה של המשתמש:\n\n"${prompt.trim()}"\n\n` +
+        'אם הבקשה כוללת אילוצים (טבעוני, ללא גלוטן, זמן קצר וכדומה) - עמוד בהם בקפדנות.'
+    );
+
+    res.json(recipe);
+  })
+);
+
+// POST /api/recipes/modify - מקבל מתכון קיים + בקשת שינוי, ומחזיר גרסה מעודכנת
+router.post(
+  '/modify',
+  aiTextLimiter,
+  asyncHandler(async (req, res) => {
+    const { recipe, request } = req.body;
+
+    const shapeError = validateRecipeShape(recipe);
+    if (shapeError) {
+      return res.status(400).json({ message: shapeError });
+    }
+    if (typeof request !== 'string' || !request.trim()) {
+      return res.status(400).json({ message: 'יש לכתוב מה לשנות במתכון' });
+    }
+    if (request.length > 500) {
+      return res.status(400).json({ message: 'בקשת השינוי ארוכה מדי (עד 500 תווים)' });
+    }
+
+    // שולחים רק את השדות הרלוונטיים ולא את כל האובייקט מהלקוח (בלי _id, owner וכו')
+    const currentRecipe = {
+      title: recipe.title,
+      description: recipe.description || '',
+      ingredients: recipe.ingredients,
+      instructions: Array.isArray(recipe.instructions)
+        ? recipe.instructions
+        : String(recipe.instructions).split('\n').filter(Boolean),
+      prepTime: recipe.prepTime ?? 0,
+      servings: recipe.servings ?? 1,
+    };
+
+    const updated = await generateRecipeJson(
+      'להלן מתכון קיים בפורמט JSON:\n\n' +
+        `${JSON.stringify(currentRecipe, null, 2)}\n\n` +
+        `בצע בו את השינוי הבא: "${request.trim()}"\n\n` +
+        'החזר את המתכון המלא לאחר השינוי - כולל כל השדות, גם אלה שלא השתנו. ' +
+        'עדכן גם את הכמויות, זמן ההכנה והתיאור אם השינוי מחייב זאת.'
+    );
+
+    res.json(updated);
+  })
+);
+
+// מחפש תצלום אמיתי של המנה ב-TheMealDB (API ציבורי חינמי, בלי מפתח).
+// זהו מסלול הגיבוי כשיצירת תמונה ב-AI לא זמינה (אין חיוב מופעל בפרויקט).
+async function findStockPhoto(searchTerm) {
+  const res = await fetch(
+    `https://www.themealdb.com/api/json/v1/1/search.php?s=${encodeURIComponent(searchTerm)}`
+  );
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.meals?.[0]?.strMealThumb || null;
+}
+
+// POST /api/recipes/generate-image - מייצר תמונה למתכון.
+// קודם מנסה ליצור תמונה אמיתית ב-AI; אם זה לא זמין (מכסה/חיוב) - נופל לתצלום אמיתי מ-TheMealDB,
+// כדי שלמתכון תמיד תהיה תמונה ולא ייתקע בלי כלום.
+router.post(
+  '/generate-image',
+  aiImageLimiter,
+  asyncHandler(async (req, res) => {
+    const { title, description } = req.body;
+
+    if (typeof title !== 'string' || !title.trim()) {
+      return res.status(400).json({ message: 'חסר שם מתכון ליצירת התמונה' });
+    }
+
+    // מסלול ראשי: יצירת תמונה ב-AI
+    try {
+      const { buffer, mimeType } = await generateRecipeImage(title, description);
+
+      await fs.mkdir(UPLOADS_DIR, { recursive: true });
+      const ext = mimeType.includes('jpeg') ? 'jpg' : 'png';
+      const fileName = `${crypto.randomUUID()}.${ext}`;
+      await fs.writeFile(path.join(UPLOADS_DIR, fileName), buffer);
+
+      // מחזירים נתיב **יחסי** ולא כתובת מלאה (C4): כתובת מלאה עם localhost
+      // נשמרת במסד ונשברת ברגע שהשרת עובר לדומיין אמיתי. הלקוח מרכיב את
+      // הכתובת המלאה מול ה-API שהוא מדבר איתו בפועל.
+      return res.json({ imageUrl: `/uploads/${fileName}`, source: 'ai' });
+    } catch (aiError) {
+      console.warn('[generate-image] יצירת תמונה ב-AI נכשלה, עובר לגיבוי:', aiError.message.slice(0, 120));
+    }
+
+    // מסלול גיבוי: תצלום אמיתי לפי מונח חיפוש שה-AI מציע
+    try {
+      const term = await suggestImageSearchTerm(title);
+      const photo = (term && (await findStockPhoto(term))) || (await findStockPhoto('food'));
+
+      if (photo) {
+        return res.json({ imageUrl: photo, source: 'stock' });
+      }
+    } catch (fallbackError) {
+      console.warn('[generate-image] גם הגיבוי נכשל:', fallbackError.message.slice(0, 120));
+    }
+
+    res.status(502).json({ message: 'לא הצלחנו להשיג תמונה למתכון' });
+  })
+);
+
+// POST /api/recipes/save - שומר את המתכון הסופי ב-DB (רק למשתמש מחובר)
+router.post(
+  '/save',
+  protect,
+  asyncHandler(async (req, res) => {
+    const { recipe } = req.body;
+
+    const shapeError = validateRecipeShape(recipe);
+    if (shapeError) {
+      return res.status(400).json({ message: shapeError });
+    }
+
+    // ה-AI מחזיר instructions כמערך שלבים; במסד הוא נשמר כמחרוזת עם \n בין השלבים
+    const instructions = Array.isArray(recipe.instructions)
+      ? recipe.instructions.join('\n')
+      : recipe.instructions;
+
+    // הבעלים נלקח מהטוקן ולא מגוף הבקשה, בדיוק כמו ביצירת מתכון רגילה
+    const saved = await Recipe.create({
+      title: recipe.title,
+      description: recipe.description || '',
+      ingredients: recipe.ingredients,
+      instructions,
+      prepTime: Number(recipe.prepTime) || 0,
+      servings: Number(recipe.servings) || 1,
+      imageUrl: recipe.imageUrl || '',
+      aiGenerated: true,
+      owner: req.user._id,
+    });
+
+    res.status(201).json(saved);
+  })
+);
+
+// handler מרכזי לשגיאות של ה-routes בקובץ הזה
+router.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+
+  if (err.name === 'ValidationError') {
+    return res.status(400).json({ message: err.message });
+  }
+
+  // statusCode מגיע משגיאות שאנחנו זורקים ב-config/gemini.js (חוסר מפתח, תשובה לא תקינה)
+  const status = err.statusCode || 500;
+  const message =
+    status === 500 ? 'שגיאה בשירות ה-AI, נסו שוב בעוד רגע' : err.message;
+
+  console.error('[AI route error]', err.message);
+  res.status(status).json({ message });
+});
+
+module.exports = router;
