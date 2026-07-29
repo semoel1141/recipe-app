@@ -3,9 +3,20 @@
 > אפליקציית ווב לניהול ושיתוף מתכונים בעברית, עם יצירת מתכונים בעזרת AI.
 > נבנתה כפרויקט גמר — Full-Stack מלא עם אימות משתמשים, הרשאות, ובדיקות אוטומטיות.
 
+### 🌐 [**לצפייה באתר החי →**](https://recipe-app-delta-amber.vercel.app)
+
+| רכיב | פלטפורמה | כתובת |
+|------|-----------|--------|
+| Frontend | Vercel | [recipe-app-delta-amber.vercel.app](https://recipe-app-delta-amber.vercel.app) |
+| Backend API | Render (Frankfurt) | [recipe-app-api-mobp.onrender.com](https://recipe-app-api-mobp.onrender.com) |
+| Database | MongoDB Atlas | — |
+
+> ⏱️ **שימו לב:** השרת מתארח בתוכנית החינמית של Render ו"נרדם" אחרי 15 דקות של חוסר פעילות.
+> הטעינה הראשונה עשויה לקחת **עד 50 שניות** — אחריה האתר מגיב מיידית.
+
 <!--
   📸 מומלץ להוסיף כאן צילום מסך של האתר:
-  1. הרץ את הפרויקט מקומית, צלם את דף הבית
+  1. צלם את דף הבית באתר החי
   2. שמור בתור docs/screenshot.png
   3. החלף את השורה הזו ב:  ![צילום מסך](docs/screenshot.png)
 -->
