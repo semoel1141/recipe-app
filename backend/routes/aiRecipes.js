@@ -11,6 +11,7 @@ const {
   generateRecipeImage,
   suggestImageSearchTerm,
 } = require('../config/gemini');
+const { getCuratedImage, deriveSearchTerms } = require('../config/recipeImages');
 
 const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
 
@@ -107,6 +108,48 @@ async function findStockPhoto(searchTerm) {
   return data.meals?.[0]?.strMealThumb || null;
 }
 
+/**
+ * מנסה למצוא תצלום שמתאים לשם המתכון, לפי סדר עדיפויות יורד של דיוק.
+ *
+ * הבאג שתוקן כאן: קודם, גזירת מונח החיפוש הסתמכה **רק** על קריאה ל-Gemini.
+ * בפרודקשן אין GEMINI_API_KEY, ולכן suggestImageSearchTerm זרק שגיאה, כל
+ * ה-try נכשל, והקוד נפל ל-findStockPhoto('food') - שמחזיר תמיד את אותה
+ * תמונה גנרית ראשונה. כך כל מתכוני ה-AI קיבלו תמונה זהה ולא קשורה.
+ *
+ * עכשיו יש שלוש שכבות, וכולן חוץ מהראשונה עובדות גם בלי מפתח AI.
+ *
+ * @param {string} title שם המתכון
+ * @returns {Promise<{imageUrl: string, source: string}|null>}
+ */
+async function findMatchingPhoto(title) {
+  // 1. התאמה מדויקת מהמפה הקבועה (המתכונים המקוריים של האתר)
+  const curated = getCuratedImage(title);
+  if (curated) return { imageUrl: curated, source: 'curated' };
+
+  // 2. מונחי חיפוש שנגזרים מהכותרת בעברית - בלי תלות ב-AI.
+  //    מנסים מהספציפי לרחב, כי הקטלוג של TheMealDB מוגבל.
+  for (const term of deriveSearchTerms(title)) {
+    const photo = await findStockPhoto(term);
+    if (photo) return { imageUrl: photo, source: 'stock' };
+  }
+
+  // 3. מונח שה-AI מציע - רק אם יש מפתח. עוטף ב-try כי חוסר מפתח זורק 503,
+  //    וכישלון כאן לא אמור להפיל את כל הבקשה.
+  try {
+    const suggested = await suggestImageSearchTerm(title);
+    if (suggested) {
+      const photo = await findStockPhoto(suggested);
+      if (photo) return { imageUrl: photo, source: 'stock-ai' };
+    }
+  } catch {
+    // אין מפתח AI, או שהקריאה נכשלה - ממשיכים בלי
+  }
+
+  // במכוון **לא** נופלים לחיפוש גנרי כמו 'food': תמונה שרירותית שלא קשורה
+  // למנה גרועה יותר מהיעדר תמונה. הלקוח מציג פלייסהולדר נקי במקרה כזה.
+  return null;
+}
+
 // POST /api/recipes/generate-image - מייצר תמונה למתכון.
 // קודם מנסה ליצור תמונה אמיתית ב-AI; אם זה לא זמין (מכסה/חיוב) - נופל לתצלום אמיתי מ-TheMealDB,
 // כדי שלמתכון תמיד תהיה תמונה ולא ייתקע בלי כלום.
@@ -137,19 +180,17 @@ router.post(
       console.warn('[generate-image] יצירת תמונה ב-AI נכשלה, עובר לגיבוי:', aiError.message.slice(0, 120));
     }
 
-    // מסלול גיבוי: תצלום אמיתי לפי מונח חיפוש שה-AI מציע
+    // מסלול גיבוי: תצלום אמיתי שמתאים לשם המנה (ראו findMatchingPhoto)
     try {
-      const term = await suggestImageSearchTerm(title);
-      const photo = (term && (await findStockPhoto(term))) || (await findStockPhoto('food'));
-
-      if (photo) {
-        return res.json({ imageUrl: photo, source: 'stock' });
+      const match = await findMatchingPhoto(title);
+      if (match) {
+        return res.json(match);
       }
     } catch (fallbackError) {
       console.warn('[generate-image] גם הגיבוי נכשל:', fallbackError.message.slice(0, 120));
     }
 
-    res.status(502).json({ message: 'לא הצלחנו להשיג תמונה למתכון' });
+    res.status(502).json({ message: 'לא הצלחנו להשיג תמונה שמתאימה למתכון' });
   })
 );
 
