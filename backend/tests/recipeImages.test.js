@@ -75,6 +75,13 @@ describe('deriveSearchTerms', () => {
     expect(deriveSearchTerms('גלידת וניל ביתית')).toEqual(['ice cream']);
   });
 
+  it('תופס את שני האיותים של פוקאצ׳ה', () => {
+    // רגרסיה: המתכון שנשמר בפועל במסד היה כתוב "פוקצ׳ה" (בלי א׳), ולכן
+    // מילת מפתח לאיות הארוך בלבד השאירה אותו בלי תמונה
+    expect(deriveSearchTerms("פוקאצ'ה איטלקית")).toEqual(['focaccia', 'bread']);
+    expect(deriveSearchTerms("פוקצ'ה איטלקית")).toEqual(['focaccia', 'bread']);
+  });
+
   it('מחזיר רשימה ריקה כשאין מילת מפתח', () => {
     expect(deriveSearchTerms('משהו שלא קיים במילון')).toEqual([]);
     expect(deriveSearchTerms('')).toEqual([]);
