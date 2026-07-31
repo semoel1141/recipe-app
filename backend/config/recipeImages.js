@@ -72,20 +72,26 @@ const CURATED_IMAGES = {
  * לגיטימיים היו נשארים בלי תמונה.
  *
  * הסדר חשוב: ביטויים ספציפיים לפני כלליים ("עוגת גבינה" לפני "עוגה").
+ *
+ * אזהרה למי שמוסיף מונח רחב: **חייבים לבדוק שהוא מחזיר תוצאות בפועל.**
+ * 'dessert' נראה כמו מונח רחב סביר, אבל search.php מחזיר עליו 0 תוצאות -
+ * הוא שם של קטגוריה ולא של מנה. הוא שימש כאן כגיבוי לוופל/קרפ/גלידה/
+ * טירמיסו, וכך כל המתכונים האלה נשארו בלי תמונה בכלל. הגיבוי הרחב באמת
+ * הוא CATEGORY_KEYWORDS למטה, שמשתמש ב-filter.php ולא ב-search.php.
  */
 const KEYWORD_TERMS = [
   // מאפים וקינוחים - לפני "עוגה" הכללי
   ['עוגת גבינה', 'cheesecake'],
   ['עוגת שוקולד', 'chocolate cake', 'chocolate'],
   ['מוס שוקולד', 'chocolate mousse', 'chocolate'],
-  ['עוגיות', 'cookies', 'dessert'],
+  ['עוגיות', 'cookies'],
   ['בראוני', 'brownies', 'chocolate'],
   ['פנקייק', 'pancakes'],
-  ['וופל', 'waffles', 'dessert'],
-  ['קרפ', 'crepe', 'dessert'],
+  ['וופל', 'waffles'],
+  ['קרפ', 'crepe'],
   ['עוגה', 'cake'],
-  ['טירמיסו', 'tiramisu', 'dessert'],
-  ['גלידה', 'ice cream', 'dessert'],
+  ['טירמיסו', 'tiramisu'],
+  ['גלידה', 'ice cream'],
   ['שוקולד', 'chocolate'],
 
   // מנות עיקריות
@@ -127,7 +133,23 @@ const KEYWORD_TERMS = [
   ['תבשיל', 'stew'],
   ['קדרה', 'casserole'],
   ['כריך', 'sandwich'],
+
+  // מאפים ולחמים. הקטלוג של TheMealDB לא מכיר את רובם בשמם ('focaccia',
+  // 'quiche' ו-'pastry' מחזירים 0 תוצאות), ולכן לכולם יש מונח רחב שנבדק
+  // ומחזיר תוצאות בפועל: 'bread' (25) או 'tart' (13).
+  // 'קישוא' חייב להופיע לפני 'קיש', אחרת "פשטידת קישואים" הייתה מזוהה כקיש.
+  ['פוקאצ', 'focaccia', 'bread'],
+  ['ציאבטה', 'ciabatta', 'bread'],
+  ['בגט', 'baguette', 'bread'],
+  ['לחמני', 'rolls', 'bread'],
+  ['פיתה', 'pita', 'bread'],
+  ['חלה', 'challah', 'bread'],
+  ['מאפה', 'pastry', 'bread'],
+  ['קישוא', 'courgette', 'vegetarian'],
+  ['קיש', 'quiche', 'tart'],
+  ['טארט', 'tart'],
   ['לחם', 'bread'],
+
   ['פשטידה', 'pie'],
 
   // ירקות
@@ -138,6 +160,165 @@ const KEYWORD_TERMS = [
   ['ברוקולי', 'broccoli'],
   ['דלעת', 'pumpkin'],
 ];
+
+/**
+ * מילת מפתח בעברית -> קטגוריה של TheMealDB.
+ *
+ * זהו הגיבוי הרחב האמיתי, והוא משתמש ב-filter.php?c= ולא ב-search.php.
+ * ההבדל מהותי: search.php?s=dessert מחזיר 0 תוצאות, בעוד
+ * filter.php?c=Dessert מחזיר 167 מנות. ארבע-עשרה הקטגוריות הקיימות הן
+ * Beef, Breakfast, Chicken, Dessert, Goat, Lamb, Miscellaneous, Pasta,
+ * Pork, Seafood, Side, Starter, Vegan, Vegetarian.
+ *
+ * הסדר חשוב כמו למעלה - הספציפי לפני הכללי.
+ */
+const CATEGORY_KEYWORDS = [
+  ['עוגת גבינה', 'Dessert'],
+  ['עוגה', 'Dessert'],
+  ['עוגיות', 'Dessert'],
+  ['קינוח', 'Dessert'],
+  ['מוס', 'Dessert'],
+  ['בראוני', 'Dessert'],
+  ['וופל', 'Dessert'],
+  ['קרפ', 'Dessert'],
+  ['פנקייק', 'Dessert'],
+  ['טירמיסו', 'Dessert'],
+  ['גלידה', 'Dessert'],
+  ['שוקולד', 'Dessert'],
+
+  ['עוף', 'Chicken'],
+  ['בקר', 'Beef'],
+  ['בשר', 'Beef'],
+
+  ['סלמון', 'Seafood'],
+  ['טונה', 'Seafood'],
+  ['שרימפס', 'Seafood'],
+  ['דג', 'Seafood'],
+
+  ['לזניה', 'Pasta'],
+  ['ספגטי', 'Pasta'],
+  ['פסטה', 'Pasta'],
+
+  ['חביתה', 'Breakfast'],
+  ['ביצים', 'Breakfast'],
+
+  ['טופו', 'Vegetarian'],
+  ['קישוא', 'Vegetarian'],
+  ['סלט', 'Vegetarian'],
+  ['ירקות', 'Vegetarian'],
+
+  // מאפים ולחמים - אין קטגוריית Bread ב-TheMealDB, ו-Side היא הקרובה ביותר
+  ['פוקאצ', 'Side'],
+  ['ציאבטה', 'Side'],
+  ['בגט', 'Side'],
+  ['לחמני', 'Side'],
+  ['פיתה', 'Side'],
+  ['חלה', 'Side'],
+  ['מאפה', 'Side'],
+  ['לחם', 'Side'],
+];
+
+/**
+ * בודק אם שם המתכון מכיל מילת מפתח, כולל הנטיות הנפוצות שלה.
+ *
+ * שם עצם נקבי בעברית שמסתיים ב-ה' מופיע בכותרות מתכונים בשלוש צורות:
+ *   רגילה  - "גלידה ביתית"
+ *   סמיכות - "גלידת וניל"    (ה' -> ת')
+ *   רבים   - "פיתות ביתיות"  (ה' -> ות')
+ *
+ * התאמת includes פשוטה תופסת רק את הראשונה, ולכן מתכונים לגיטימיים נשארו
+ * בלי תמונה בכלל: "גלידת וניל" לא התאים ל'גלידה', "פיתות ביתיות" לא התאים
+ * ל'פיתה'. שלוש השורות כאן מכסות את רובן המכריע של הכותרות בפועל.
+ *
+ * @param {string} title שם המתכון (כבר trimmed)
+ * @param {string} keyword מילת המפתח מהמילון
+ */
+function matchesKeyword(title, keyword) {
+  if (title.includes(keyword)) return true;
+
+  // הנטיות רלוונטיות רק למילים שמסתיימות ב-ה'
+  if (!keyword.endsWith('ה')) return false;
+
+  const stem = keyword.slice(0, -1);
+  return title.includes(`${stem}ת`) || title.includes(`${stem}ות`);
+}
+
+/**
+ * גיבוב יציב של מחרוזת (וריאנט של djb2).
+ *
+ * חייב להיות דטרמיניסטי בין הרצות ובין גרסאות Node - ולכן חשבון פשוט
+ * ולא Math.random ולא crypto. זו הדרישה שמאפשרת לאותו מתכון לקבל תמיד
+ * את אותה תמונה, גם אחרי פריסה מחדש של השרת.
+ */
+function stableHash(text) {
+  let hash = 5381;
+  for (let i = 0; i < text.length; i += 1) {
+    // |0 שומר על 32 ביט ומונע גלישה למספרים לא מדויקים
+    hash = ((hash << 5) + hash + text.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+/**
+ * מצמצם תוצאות חיפוש לאלה שבהן מונח החיפוש מופיע כמילה שלמה.
+ *
+ * החיפוש של TheMealDB הוא תת-מחרוזת, וזה מייצר התאמות שגויות בולטות:
+ * 'cake' מחזיר "Banana Pan**cake**s", ו-'bread' מחזיר "**Bread**fruit in
+ * Butter Sauce". שתיהן תמונות שלא קשורות למתכון שהמשתמש כתב.
+ *
+ * כשאין אף התאמת מילה שלמה מחזירים את הרשימה המלאה - עדיף מועמד חלש
+ * מאשר לרדת מדרגה בשרשרת ולהחזיר כלום.
+ *
+ * @param {Array} meals תוצאות מ-TheMealDB
+ * @param {string} term מונח החיפוש ששימש
+ */
+function filterWholeWord(meals, term) {
+  if (!Array.isArray(meals) || meals.length === 0) return [];
+
+  const words = String(term).toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return meals;
+
+  const matches = meals.filter((meal) => {
+    const name = String(meal?.strMeal || '').toLowerCase();
+    return words.every((word) => {
+      const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`(^|[^a-z])${escaped}([^a-z]|$)`).test(name);
+    });
+  });
+
+  return matches.length > 0 ? matches : meals;
+}
+
+/**
+ * בוחר פריט מרשימה לפי גיבוב של מפתח - יציב לאותו מפתח, שונה בין מפתחות.
+ *
+ * זה הלב של התיקון לבאג "כל מתכוני השוקולד קיבלו את אותה תמונה": קודם
+ * הקוד לקח תמיד את התוצאה הראשונה, ולכן "עוגת שוקולד", "מוס שוקולד"
+ * ו"בראוני" - שכולם נופלים למונח הרחב 'chocolate' - קיבלו את אותה
+ * Chocolate Gateau. עכשיו כל שם מתכון בוחר תוצאה אחרת מתוך ה-16.
+ *
+ * @param {Array} items רשימת המועמדים
+ * @param {string} seed מפתח הבחירה (שם המתכון)
+ */
+function pickStable(items, seed) {
+  if (!Array.isArray(items) || items.length === 0) return null;
+  return items[stableHash(String(seed)) % items.length];
+}
+
+/**
+ * גוזר קטגוריית TheMealDB משם מתכון בעברית.
+ * @param {string} title
+ * @returns {string|null}
+ */
+function deriveCategory(title) {
+  if (typeof title !== 'string' || !title.trim()) return null;
+
+  const normalized = title.trim();
+  for (const [keyword, category] of CATEGORY_KEYWORDS) {
+    if (matchesKeyword(normalized, keyword)) return category;
+  }
+  return null;
+}
 
 /**
  * גוזר מונחי חיפוש באנגלית משם מתכון בעברית, בלי שום קריאה ל-AI.
@@ -155,7 +336,7 @@ function deriveSearchTerms(title) {
 
   // ההתאמה הראשונה לפי סדר המילון (ספציפי -> כללי) קובעת
   for (const [keyword, term, broader] of KEYWORD_TERMS) {
-    if (normalized.includes(keyword)) {
+    if (matchesKeyword(normalized, keyword)) {
       return broader ? [term, broader] : [term];
     }
   }
@@ -176,6 +357,12 @@ function getCuratedImage(title) {
 module.exports = {
   CURATED_IMAGES,
   KEYWORD_TERMS,
+  CATEGORY_KEYWORDS,
   deriveSearchTerms,
+  deriveCategory,
   getCuratedImage,
+  matchesKeyword,
+  filterWholeWord,
+  pickStable,
+  stableHash,
 };

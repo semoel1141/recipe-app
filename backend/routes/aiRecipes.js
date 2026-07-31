@@ -11,7 +11,13 @@ const {
   generateRecipeImage,
   suggestImageSearchTerm,
 } = require('../config/gemini');
-const { getCuratedImage, deriveSearchTerms } = require('../config/recipeImages');
+const {
+  getCuratedImage,
+  deriveSearchTerms,
+  deriveCategory,
+  filterWholeWord,
+  pickStable,
+} = require('../config/recipeImages');
 
 const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
 
@@ -117,13 +123,30 @@ router.post(
 
 // מחפש תצלום אמיתי של המנה ב-TheMealDB (API ציבורי חינמי, בלי מפתח).
 // זהו מסלול הגיבוי כשיצירת תמונה ב-AI לא זמינה (אין חיוב מופעל בפרויקט).
-async function findStockPhoto(searchTerm) {
+//
+// seed הוא שם המתכון, והוא זה שקובע *איזו* מהתוצאות נבחרת. בלעדיו הקוד
+// לקח תמיד את התוצאה הראשונה, וכל המתכונים שנפלו לאותו מונח חיפוש קיבלו
+// תמונה זהה (ראו pickStable ב-config/recipeImages.js).
+async function findStockPhoto(searchTerm, seed) {
   const res = await fetch(
     `https://www.themealdb.com/api/json/v1/1/search.php?s=${encodeURIComponent(searchTerm)}`
   );
   if (!res.ok) return null;
   const data = await res.json();
-  return data.meals?.[0]?.strMealThumb || null;
+  // filterWholeWord מסנן התאמות תת-מחרוזת שגויות ('cake' -> "Pancakes")
+  return pickStable(filterWholeWord(data.meals || [], searchTerm), seed)?.strMealThumb || null;
+}
+
+// גיבוי רחב לפי קטגוריה. משתמש ב-filter.php ולא ב-search.php, כי שמות
+// הקטגוריות אינם שמות מנות: search.php?s=dessert מחזיר 0 תוצאות בעוד
+// filter.php?c=Dessert מחזיר 167. הבחירה מתוכן, שוב, לפי שם המתכון.
+async function findCategoryPhoto(category, seed) {
+  const res = await fetch(
+    `https://www.themealdb.com/api/json/v1/1/filter.php?c=${encodeURIComponent(category)}`
+  );
+  if (!res.ok) return null;
+  const data = await res.json();
+  return pickStable(data.meals || [], seed)?.strMealThumb || null;
 }
 
 /**
@@ -147,7 +170,7 @@ async function findMatchingPhoto(title) {
   // 2. מונחי חיפוש שנגזרים מהכותרת בעברית - בלי תלות ב-AI.
   //    מנסים מהספציפי לרחב, כי הקטלוג של TheMealDB מוגבל.
   for (const term of deriveSearchTerms(title)) {
-    const photo = await findStockPhoto(term);
+    const photo = await findStockPhoto(term, title);
     if (photo) return { imageUrl: photo, source: 'stock' };
   }
 
@@ -156,11 +179,21 @@ async function findMatchingPhoto(title) {
   try {
     const suggested = await suggestImageSearchTerm(title);
     if (suggested) {
-      const photo = await findStockPhoto(suggested);
+      const photo = await findStockPhoto(suggested, title);
       if (photo) return { imageUrl: photo, source: 'stock-ai' };
     }
   } catch {
     // אין מפתח AI, או שהקריאה נכשלה - ממשיכים בלי
+  }
+
+  // 4. גיבוי אחרון: תצלום מהקטגוריה המתאימה. פחות מדויק ממונח חיפוש, אבל
+  //    עדיין *מהסוג הנכון* - קינוח למתכון קינוח, עוף למתכון עוף - ולכן
+  //    עדיף על היעדר תמונה. זה מה שמציל מתכונים כמו "מוס שוקולד בצנצנות",
+  //    ששני המונחים שלהם מחזירים 0 תוצאות ב-search.php.
+  const category = deriveCategory(title);
+  if (category) {
+    const photo = await findCategoryPhoto(category, title);
+    if (photo) return { imageUrl: photo, source: 'stock-category' };
   }
 
   // במכוון **לא** נופלים לחיפוש גנרי כמו 'food': תמונה שרירותית שלא קשורה
