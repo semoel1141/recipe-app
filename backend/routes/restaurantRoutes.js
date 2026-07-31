@@ -25,6 +25,8 @@ const CUISINE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // שם מתכון -> מטבח 
 const DEFAULT_RADIUS_M = 3000;
 const WIDE_RADIUS_M = 15000; // ניסיון שני כשאין תוצאות ברדיוס הרגיל
 const MAX_RESULTS = 12;
+// כמה מסעדות "סתם בסביבה" להציג כשאין מספיק התאמות אמיתיות
+const MAX_OTHER_NEARBY = 4;
 const MIN_RESULTS_BEFORE_WIDENING = 3;
 
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -194,16 +196,23 @@ router.get(
       distanceKm: Number(distanceKm(lat, lon, place.lat, place.lon).toFixed(1)),
     }));
 
-    // מסעדות שתואמות למטבח של המנה עולות לראש; השאר ממוינות לפי מרחק.
-    // דירוג ולא סינון - עדיף להציג מסעדות באזור מאשר רשימה ריקה, בגלל
-    // שתיוג ה-cuisine ב-OSM בישראל חלקי מאוד.
-    const restaurants = rankByCuisine(withDistance, cuisine).slice(0, MAX_RESULTS);
+    const ranked = rankByCuisine(withDistance, cuisine);
+
+    // שתי קבוצות נפרדות, ובכוונה. המקומות התואמים הם התשובה לשאלה ששאל
+    // המשתמש; השאר הם רק "מה יש בסביבה", והלקוח מציג אותם תחת כותרת משלהם
+    // כדי לא להבטיח שהם מגישים את המנה. בלי ההפרדה הזו מתכון עוגת שוקולד
+    // הציג מסעדת שניצל ככזו שמכינה אותו.
+    const matches = ranked.filter((place) => place.matchesDish).slice(0, MAX_RESULTS);
+    // מעט בלבד: אלה נתוני הקשר, לא תוצאות. רשימה ארוכה של מסעדות לא
+    // רלוונטיות רק מטביעה את התואמות.
+    const others = ranked.filter((place) => !place.matchesDish).slice(0, MAX_OTHER_NEARBY);
 
     res.json({
       degraded: false,
       cuisine,
       searchUrl,
-      restaurants,
+      matchCount: matches.length,
+      restaurants: [...matches, ...others],
       attribution: ATTRIBUTION,
     });
   })

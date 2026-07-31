@@ -14,6 +14,43 @@ import api from '../api/axios';
  * 2. בכל כרטיס יש קישור למפות Google. שם תמיד יש טלפון, שעות פתיחה וניווט,
  *    בלי מפתח API ובלי עלות. זה מסלול הגיבוי האמיתי של הפיצ'ר.
  */
+/** רשימת כרטיסי מסעדה. משותפת לשתי הקבוצות (תואמות / בקרבתך). */
+function RestaurantList({ places }) {
+  return (
+    <ul className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {places.map((place) => (
+        <li key={place.id} className="rounded-md bg-stone-100 p-4">
+          <p className="font-medium text-stone-900">{place.name}</p>
+
+          <p className="mt-1 text-sm font-light text-stone-500">
+            {[place.address, `${place.distanceKm} ק"מ`].filter(Boolean).join(' · ')}
+          </p>
+
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+            {/* tel: פותח את החייגן בנייד - שווה הרבה יותר מטקסט בלבד */}
+            {place.phone && (
+              <a
+                href={`tel:${place.phone.replace(/[^+\d]/g, '')}`}
+                className="font-medium text-stone-900 underline underline-offset-4 hover:text-stone-600"
+              >
+                {place.phone}
+              </a>
+            )}
+            <a
+              href={place.mapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-stone-500 underline underline-offset-4 hover:text-stone-900"
+            >
+              {place.phone ? 'במפות' : 'טלפון ופרטים במפות'}
+            </a>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export default function RestaurantFinder({ dish }) {
   const [enabled, setEnabled] = useState(false);
   const [status, setStatus] = useState('idle'); // idle | locating | loading | done | error
@@ -89,6 +126,11 @@ export default function RestaurantFinder({ dish }) {
 
   const busy = status === 'locating' || status === 'loading';
 
+  // matchesDish מגיע מהשרת ומסמן מי באמת מגיש מנה מהסוג הזה
+  const restaurants = data?.restaurants || [];
+  const matches = restaurants.filter((place) => place.matchesDish);
+  const others = restaurants.filter((place) => !place.matchesDish);
+
   return (
     <section className="mt-10 border-t border-stone-200 pt-8">
       <h3 className="text-xl font-bold tracking-tight text-stone-900">לא בא לך להכין?</h3>
@@ -133,42 +175,26 @@ export default function RestaurantFinder({ dish }) {
             </p>
           )}
 
-          {!data.degraded && data.restaurants.length === 0 && (
-            <p className="mt-4 font-light text-stone-500">לא נמצאו מסעדות בקרבתך.</p>
+          {/* כשאין אף התאמה אומרים את זה במפורש. הגרסה הקודמת הציגה במקום
+              זה את המסעדות הקרובות ביותר תחת הכותרת "מגישות משהו דומה",
+              כך שמתכון עוגת שוקולד הראה מסעדת שניצל כאילו היא מכינה אותו. */}
+          {!data.degraded && matches.length === 0 && (
+            <p className="mt-4 font-light leading-relaxed text-stone-500">
+              לא מצאנו בקרבתך מסעדה שמתמחה במנה הזו.
+            </p>
           )}
 
-          {data.restaurants.length > 0 && (
-            <ul className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {data.restaurants.map((place) => (
-                <li key={place.id} className="rounded-md bg-stone-100 p-4">
-                  <p className="font-medium text-stone-900">{place.name}</p>
+          {matches.length > 0 && <RestaurantList places={matches} />}
 
-                  <p className="mt-1 text-sm font-light text-stone-500">
-                    {[place.address, `${place.distanceKm} ק"מ`].filter(Boolean).join(' · ')}
-                  </p>
-
-                  <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-                    {/* tel: פותח את החייגן בנייד - שווה הרבה יותר מטקסט בלבד */}
-                    {place.phone && (
-                      <a
-                        href={`tel:${place.phone.replace(/[^+\d]/g, '')}`}
-                        className="font-medium text-stone-900 underline underline-offset-4 hover:text-stone-600"
-                      >
-                        {place.phone}
-                      </a>
-                    )}
-                    <a
-                      href={place.mapsUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-medium text-stone-500 underline underline-offset-4 hover:text-stone-900"
-                    >
-                      {place.phone ? 'במפות' : 'טלפון ופרטים במפות'}
-                    </a>
-                  </div>
-                </li>
-              ))}
-            </ul>
+          {others.length > 0 && (
+            <div className="mt-8">
+              {/* כותרת נפרדת ומדויקת: אלה מסעדות בסביבה, בלי הבטחה שהן
+                  מגישות את המנה */}
+              <h4 className="text-sm font-medium text-stone-900">
+                {matches.length > 0 ? 'עוד מסעדות בקרבתך' : 'מסעדות בקרבתך'}
+              </h4>
+              <RestaurantList places={others} />
+            </div>
           )}
 
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3">

@@ -200,23 +200,29 @@ async function findRestaurants({ lat, lon, radiusMeters = 5000 }) {
 }
 
 /**
- * ממיין מקומות כך שאלה שתואמים למטבח המבוקש עולים לראש, ובתוך כל קבוצה
- * לפי מרחק.
+ * מסמן אילו מקומות באמת תואמים למטבח המבוקש, וממיין את התואמים לראש.
+ *
+ * הדגל matchesDish הוא העיקר כאן, לא המיון. בלעדיו הלקוח הציג את כל
+ * התוצאות תחת הכותרת "מסעדות שמגישות משהו דומה" - וזו הייתה טענה שקרית:
+ * למתכון עוגת שוקולד רק 3 מתוך 12 באמת התאימו, והשאר היו סתם המסעדות
+ * הקרובות ביותר (פלאפל, פיצה, המבורגר). המשתמש ראה מסעדת שניצל מתחת
+ * לכותרת שהבטיחה מנה דומה, ובצדק חשב שהפיצ'ר שבור.
  *
  * ההתאמה מכילה (`includes`) ולא שוויון, כי OSM מאחסן כמה מטבחים במחרוזת
  * אחת מופרדת בנקודה-פסיק, למשל "falafel;hummus;middle_eastern".
  *
- * כשאין מטבח מבוקש - מיון לפי מרחק בלבד.
+ * כשאין מטבח מבוקש אף מקום לא מסומן כתואם, והמיון הוא לפי מרחק בלבד.
  */
 function rankByCuisine(places, cuisine) {
   const wanted = String(cuisine || '').toLowerCase();
 
-  return [...places].sort((a, b) => {
-    if (wanted) {
-      const aMatch = a.cuisine.toLowerCase().includes(wanted) ? 0 : 1;
-      const bMatch = b.cuisine.toLowerCase().includes(wanted) ? 0 : 1;
-      if (aMatch !== bMatch) return aMatch - bMatch;
-    }
+  const tagged = places.map((place) => ({
+    ...place,
+    matchesDish: Boolean(wanted) && place.cuisine.toLowerCase().includes(wanted),
+  }));
+
+  return tagged.sort((a, b) => {
+    if (a.matchesDish !== b.matchesDish) return a.matchesDish ? -1 : 1;
     return a.distanceKm - b.distanceKm;
   });
 }

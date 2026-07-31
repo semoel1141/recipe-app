@@ -251,6 +251,65 @@ describe('בניית שאילתת Overpass', () => {
   });
 });
 
+describe('הפרדה בין מסעדות תואמות ללא תואמות', () => {
+  // תרחיש אמיתי שדווח: מתכון עוגת שוקולד הציג מסעדת שניצל תחת הכותרת
+  // "מסעדות שמגישות משהו דומה"
+  const DESSERT_AREA = {
+    elements: [
+      {
+        type: 'node',
+        id: 10,
+        lat: 32.088,
+        lon: 34.783,
+        tags: { name: 'קונדיטוריה', amenity: 'cafe', cuisine: 'cake;dessert' },
+      },
+      ...Array.from({ length: 8 }, (_, i) => ({
+        type: 'node',
+        id: 20 + i,
+        lat: 32.086 + i * 0.001,
+        lon: 34.782,
+        tags: { name: `שניצל ${i}`, amenity: 'restaurant', cuisine: 'schnitzel' },
+      })),
+    ],
+  };
+
+  it('מסמן כל מסעדה בדגל matchesDish', async () => {
+    mockOverpass(DESSERT_AREA);
+
+    const res = await request(app)
+      .get('/api/restaurants/nearby')
+      .query({ lat: LAT, lon: LON, dish: 'עוגה' });
+
+    // בלי מפתח Gemini אין מטבח מבוקש, ולכן אף אחת לא מסומנת כתואמת -
+    // וזה בדיוק הנכון: עדיף לא להבטיח כלום מאשר להבטיח לא נכון
+    expect(res.body.restaurants.every((r) => r.matchesDish === false)).toBe(true);
+    expect(res.body.matchCount).toBe(0);
+  });
+
+  it('מגביל את מספר המסעדות הלא תואמות, כדי שלא יטביעו את התוצאות', async () => {
+    mockOverpass(DESSERT_AREA);
+
+    const res = await request(app)
+      .get('/api/restaurants/nearby')
+      .query({ lat: LAT, lon: LON, dish: 'עוגה' });
+
+    // 9 מקומות במוק, אבל רק 4 לא-תואמים מוצגים
+    const notMatching = res.body.restaurants.filter((r) => !r.matchesDish);
+    expect(notMatching.length).toBeLessThanOrEqual(4);
+  });
+
+  it('כולל matchCount בתשובה כדי שהלקוח ידע איזו כותרת להציג', async () => {
+    mockOverpass();
+
+    const res = await request(app)
+      .get('/api/restaurants/nearby')
+      .query({ lat: LAT, lon: LON, dish: 'פלאפל' });
+
+    expect(res.body).toHaveProperty('matchCount');
+    expect(typeof res.body.matchCount).toBe('number');
+  });
+});
+
 describe('דירוג לפי מטבח', () => {
   const places = [
     { name: 'קרוב, מטבח אחר', cuisine: 'burger', distanceKm: 0.2 },
@@ -268,6 +327,20 @@ describe('דירוג לפי מטבח', () => {
       'קרוב, מטבח אחר',
       'בינוני, בלי תיוג',
     ]);
+  });
+
+  it('מסמן matchesDish רק על מי שבאמת תואם', () => {
+    const ranked = rankByCuisine(places, 'falafel');
+    const matching = ranked.filter((p) => p.matchesDish).map((p) => p.name);
+
+    expect(matching).toEqual(['בינוני, מטבח תואם', 'רחוק, מטבח תואם']);
+  });
+
+  it('לא מסמן אף אחד כתואם כשאין מטבח מבוקש', () => {
+    // קריטי: בלי זה כל מסעדה בסביבה הייתה מוצגת כ"מגישה משהו דומה"
+    const ranked = rankByCuisine(places, '');
+
+    expect(ranked.every((p) => p.matchesDish === false)).toBe(true);
   });
 
   it('ממיין לפי מרחק בלבד כשאין מטבח מבוקש', () => {
