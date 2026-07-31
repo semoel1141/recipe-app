@@ -9,7 +9,7 @@ delete process.env.GEMINI_API_KEY;
 
 const createApp = require('../app');
 const PlacesCache = require('../models/PlacesCache');
-const { buildQuery, normalize, rankByCuisine } = require('../config/overpass');
+const { buildQuery, normalize, rankByCuisine, cuisineMatches } = require('../config/overpass');
 const { connectTestDb, closeTestDb, clearTestDb } = require('./setup');
 
 const app = createApp();
@@ -307,6 +307,30 @@ describe('הפרדה בין מסעדות תואמות ללא תואמות', () =
 
     expect(res.body).toHaveProperty('matchCount');
     expect(typeof res.body.matchCount).toBe('number');
+  });
+});
+
+describe('cuisineMatches - התאמת תגי מטבח', () => {
+  it('פוסל pancake כהתאמה ל-cake', () => {
+    // מקרה אמיתי מהייצור: "NOLA American Bakery" תויגה "bagel;pancake;salad"
+    // וסומנה כמגישה עוגות, כי pancake מכיל את cake
+    expect(cuisineMatches('bagel;pancake;salad', 'cake')).toBe(false);
+  });
+
+  it('מזהה טוקן מדויק ברשימה מופרדת בנקודה-פסיק', () => {
+    expect(cuisineMatches('breakfast;cake;coffee_shop', 'cake')).toBe(true);
+    expect(cuisineMatches('middle_eastern;falafel', 'falafel')).toBe(true);
+  });
+
+  it('מזהה מטבח בתוך טוקן מורכב', () => {
+    expect(cuisineMatches('italian_pizza', 'pizza')).toBe(true);
+    expect(cuisineMatches('middle_eastern', 'eastern')).toBe(true);
+  });
+
+  it('לא מתאים כשאין מטבח מבוקש או תג', () => {
+    expect(cuisineMatches('pizza', '')).toBe(false);
+    expect(cuisineMatches('', 'pizza')).toBe(false);
+    expect(cuisineMatches(null, 'pizza')).toBe(false);
   });
 });
 

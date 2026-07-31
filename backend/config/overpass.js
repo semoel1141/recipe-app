@@ -200,6 +200,28 @@ async function findRestaurants({ lat, lon, radiusMeters = 5000 }) {
 }
 
 /**
+ * האם תג ה-cuisine של מקום תואם למטבח המבוקש.
+ *
+ * OSM מאחסן כמה מטבחים במחרוזת אחת מופרדת בנקודה-פסיק
+ * ("middle_eastern;falafel"), ולכן ההשוואה היא ברמת הטוקן ולא תת-מחרוזת.
+ * זה לא ניואנס: השוואת includes פשוטה סימנה מאפייה שתויגה
+ * "bagel;pancake;salad" כתואמת למטבח 'cake', כי pan**cake** מכיל אותו.
+ *
+ * הפיצול ב-_ נחוץ כדי ש-'italian_pizza' עדיין ייחשב התאמה ל-'pizza'.
+ */
+function cuisineMatches(cuisineTag, wanted) {
+  if (!wanted) return false;
+
+  return String(cuisineTag || '')
+    .toLowerCase()
+    .split(';')
+    .some((token) => {
+      const trimmed = token.trim();
+      return trimmed === wanted || trimmed.split(/[_-]/).includes(wanted);
+    });
+}
+
+/**
  * מסמן אילו מקומות באמת תואמים למטבח המבוקש, וממיין את התואמים לראש.
  *
  * הדגל matchesDish הוא העיקר כאן, לא המיון. בלעדיו הלקוח הציג את כל
@@ -208,8 +230,7 @@ async function findRestaurants({ lat, lon, radiusMeters = 5000 }) {
  * הקרובות ביותר (פלאפל, פיצה, המבורגר). המשתמש ראה מסעדת שניצל מתחת
  * לכותרת שהבטיחה מנה דומה, ובצדק חשב שהפיצ'ר שבור.
  *
- * ההתאמה מכילה (`includes`) ולא שוויון, כי OSM מאחסן כמה מטבחים במחרוזת
- * אחת מופרדת בנקודה-פסיק, למשל "falafel;hummus;middle_eastern".
+ * ההתאמה עצמה נעשית ב-cuisineMatches למעלה.
  *
  * כשאין מטבח מבוקש אף מקום לא מסומן כתואם, והמיון הוא לפי מרחק בלבד.
  */
@@ -218,7 +239,7 @@ function rankByCuisine(places, cuisine) {
 
   const tagged = places.map((place) => ({
     ...place,
-    matchesDish: Boolean(wanted) && place.cuisine.toLowerCase().includes(wanted),
+    matchesDish: cuisineMatches(place.cuisine, wanted),
   }));
 
   return tagged.sort((a, b) => {
@@ -230,6 +251,7 @@ function rankByCuisine(places, cuisine) {
 module.exports = {
   findRestaurants,
   rankByCuisine,
+  cuisineMatches,
   distanceKm,
   buildMapsUrl,
   buildSearchUrl,
