@@ -6,6 +6,7 @@ const recipeRoutes = require('./routes/recipeRoutes');
 const authRoutes = require('./routes/authRoutes');
 const aiRecipeRoutes = require('./routes/aiRecipes');
 const userRoutes = require('./routes/userRoutes');
+const restaurantRoutes = require('./routes/restaurantRoutes');
 
 /**
  * בונה את אפליקציית ה-Express בלי להאזין לפורט ובלי להתחבר למסד.
@@ -60,6 +61,8 @@ function createApp() {
   app.use('/api/auth', authRoutes);
   // ניהול משתמשים - כל הנתיבים בפנים מוגנים ב-protect + admin
   app.use('/api/users', userRoutes);
+  // חיפוש מסעדות (OpenStreetMap) - כבוי כברירת מחדל, ראו RESTAURANT_FINDER
+  app.use('/api/restaurants', restaurantRoutes);
 
   // 404 בפורמט JSON - בלי זה Express מחזיר דף HTML שהלקוח לא יודע לפרסר
   app.use((req, res) => {

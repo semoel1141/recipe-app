@@ -36,4 +36,16 @@ const authLimiter = rateLimit({
   message: message('יותר מדי ניסיונות התחברות. נסו שוב בעוד 15 דקות.'),
 });
 
-module.exports = { aiTextLimiter, aiImageLimiter, authLimiter };
+// חיפוש מסעדות - פונה ל-Overpass הציבורי, שהוא שירות התנדבותי עם מדיניות
+// שימוש הוגן. בפועל הוא מחזיר שגיאות עומס כבר בכמה שאילתות רצופות, ולכן
+// ההגבלה כאן נועדה להגן עליו לא פחות מאשר עלינו. רוב הבקשות ממילא נענות
+// מהקאש במונגו ולא מגיעות אליו בכלל.
+const restaurantLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: message('יותר מדי חיפושי מסעדות. נסו שוב בעוד כמה דקות.'),
+});
+
+module.exports = { aiTextLimiter, aiImageLimiter, authLimiter, restaurantLimiter };

@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../api/axios';
 import { useAuth } from '../hooks/useAuth';
 import RecipeImage from '../components/RecipeImage';
+import RestaurantFinder from '../components/RestaurantFinder';
 
 export default function RecipeDetail() {
   const { id } = useParams();
@@ -134,6 +135,9 @@ export default function RecipeDetail() {
                 </li>
               ))}
           </ol>
+
+          {/* מוסתר לגמרי כשהדגל RESTAURANT_FINDER כבוי בשרת */}
+          <RestaurantFinder dish={recipe.title} />
 
           {canEdit && (
             <div className="mt-10 flex gap-3 border-t border-stone-200 pt-8">

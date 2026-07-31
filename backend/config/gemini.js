@@ -35,6 +35,39 @@ const RECIPE_SCHEMA = {
   propertyOrdering: ['title', 'description', 'ingredients', 'instructions', 'prepTime', 'servings'],
 };
 
+/**
+ * ערכי cuisine שבאמת קיימים ב-OpenStreetMap.
+ *
+ * הרשימה סגורה בכוונה: המודל מקבל אותה כ-enum ב-responseSchema, כך שהוא
+ * *לא יכול* להחזיר ערך שאינו כאן. בלי זה הוא ממציא תגים כמו "israeli_salad"
+ * שלא קיימים ב-OSM, והשאילתה חוזרת ריקה בלי שנבין למה.
+ *
+ * 'none' הוא תשובה לגיטימית - למנות כמו "מוס שוקולד בצנצנות" אין מטבח
+ * מקביל, ואז עדיף להציג מסעדות באזור בלי סינון מאשר רשימה ריקה.
+ */
+const OSM_CUISINES = [
+  'falafel', 'hummus', 'kebab', 'shawarma', 'middle_eastern', 'lebanese', 'turkish',
+  'pizza', 'italian', 'pasta', 'mediterranean', 'greek',
+  'burger', 'american', 'sandwich', 'chicken', 'barbecue', 'steak_house',
+  'sushi', 'japanese', 'chinese', 'thai', 'asian', 'noodle', 'ramen', 'indian',
+  'mexican', 'french', 'spanish', 'georgian',
+  'fish', 'seafood', 'soup', 'salad', 'vegetarian', 'vegan',
+  'breakfast', 'bakery', 'cake', 'dessert', 'ice_cream', 'coffee_shop', 'juice',
+  'regional', 'local', 'international',
+];
+
+const CUISINE_SCHEMA = {
+  type: 'object',
+  properties: {
+    cuisine: {
+      type: 'string',
+      enum: [...OSM_CUISINES, 'none'],
+      description: 'תג cuisine של OpenStreetMap שמתאר את סוג המנה, או none אם אין התאמה',
+    },
+  },
+  required: ['cuisine'],
+};
+
 let client = null;
 
 // יוצרים את הלקוח בפעם הראשונה שצריך אותו (ולא בזמן טעינת הקובץ),
@@ -143,11 +176,47 @@ async function suggestImageSearchTerm(title) {
   return (response.text || '').trim().replace(/[."']/g, '').slice(0, 40);
 }
 
+/**
+ * ממפה שם מתכון לתג cuisine של OpenStreetMap, לצורך חיפוש מסעדות.
+ *
+ * מחזיר מחרוזת ריקה כשאין התאמה - הקורא אמור להתייחס לזה כ"חפש מסעדות
+ * באזור בלי סינון", לא כשגיאה.
+ *
+ * @param {string} title - שם המתכון, בעברית
+ * @returns {Promise<string>} ערך cuisine תקין של OSM, או '' כשאין
+ */
+async function suggestCuisineTag(title) {
+  const ai = getClient();
+
+  const response = await ai.models.generateContent({
+    model: MODEL,
+    contents:
+      `שם המנה: "${title}". איזה תג cuisine של OpenStreetMap הכי מתאר מסעדה ` +
+      'שמגישה את המנה הזו? אם המנה היא קינוח או מאפה ביתי שאין לו מקבילה ' +
+      'במסעדה, החזר none.',
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: CUISINE_SCHEMA,
+    },
+  });
+
+  try {
+    const { cuisine } = JSON.parse(response.text || '{}');
+    // 'none' הוא תשובה תקינה של המודל, ומתורגם כאן ל"בלי סינון"
+    return cuisine && cuisine !== 'none' ? cuisine : '';
+  } catch {
+    // הפיצ'ר הזה הוא שיפור ולא ליבה - אם הפרסור נכשל, ממשיכים בלי סינון
+    return '';
+  }
+}
+
 module.exports = {
   generateRecipeJson,
   generateRecipeImage,
   suggestImageSearchTerm,
+  suggestCuisineTag,
   RECIPE_SCHEMA,
+  OSM_CUISINES,
   MODEL,
   IMAGE_MODEL,
 };
